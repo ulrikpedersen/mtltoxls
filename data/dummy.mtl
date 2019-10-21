@@ -1,0 +1,55 @@
+﻿ND_RelParSet_D02 = {
+
+Name = DUMMY
+
+PARAMETERS =
+{
+  Name = TEMPERATURE
+  Type = Real
+  Default = 0.000000e+00 C
+  Access = Full
+},
+{
+  Name = PTC_MATERIAL_DESCRIPTION
+  Type = String
+  Default = 'DUMMY'
+  Access = Full
+},
+{
+  Name = PTC_INITIAL_BENDY_FACTOR
+  Type = Integer
+  Default = 42
+  Access = Full
+},
+{
+  Name = PTC_MATERIAL_TYPE
+  Type = Integer
+  Default = 99
+  Access = Locked
+},
+{
+  Name = PTC_FAILURE_CRITERION_TYPE
+  Type = String
+  Default = 'NONE'
+  Access = Locked
+},
+
+{
+  Name = PTC_XHATCH_FILE
+  Type = String
+  Default = 'C:\\path\to\file.xhatch'
+  Access = Full
+},
+{
+  Name = PTC_APPEARANCE_1
+  Type = String
+  Default = 'blurry'
+  Access = Full
+},
+{
+  Name = DUMMY_PARAM
+  Type = String
+  Default = 'This is just another a dummy'
+  Access = Full
+}
+}
