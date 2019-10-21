@@ -59,8 +59,7 @@ def parse_mtl(fname):
     for pd in parameter_dicts:
         material_params.update({pd['Name']: pd})
 
-    # TODO: remote debug print
-    pprint(material_params)
+    #pprint(material_params)
 
     # Scan file content again to extract the material ID and Name.
     material_key = re.findall(re_key, mtl[1:])
@@ -75,50 +74,64 @@ def parse_mtl(fname):
     return result
 
 
-def store_in_spreadsheet(fname, material):
-    material_params = {}
+class ParameterRowIndex:
+    """Maintain a dictionary of parameter name -> parameter row index"""
+    def __init__(self, offset=1):
+        self._parameter_index = {}
+        self._current_offset = offset
 
-    # Create a index dictionary to look up parameter name -> spreadsheet row
-    parameter_row_start_index = 5
-    param_index_row = parameter_row_start_index
-    parameters_index_rows = {}
-    for param in material_params.keys():
-        parameters_index_rows.update({param: param_index_row})
-        param_index_row += 1
+    def add_parameters(self, parameters: list):
+        """Add new parameters to the index data. Only new parameters from the 'parameters' list are added with
+        an incremental index"""
+        for param in parameters:
+            if param not in self._parameter_index:
+                self._parameter_index.update({param: self._current_offset})
+                self._current_offset += 1
 
-    # Create a Data point to spreadsheet column lookup
-    data_columns = {
-        'Name': 'A',
-        'Default': 'B',
-        'Unit': 'C',
-        'Type': 'D',
-        'Access': 'E'
-    }
+    @property
+    def parameter_index(self):
+        return self._parameter_index
 
-    wb = Workbook()
-    ws = wb.active
 
-    # Create headers
-    ws['A1'] = 'ID:'
-    #ws['B1'] = key
-    ws['A2'] = 'Material'
-    ws['B2'] = material
-    ws.merge_cells('B1:E1')
-    ws.merge_cells('B2:E2')
+class StoreSpreadsheet:
+    def __init__(self, fname):
+        self._fname = fname
+        self._workbook = Workbook()
+        self._param_row = ParameterRowIndex(offset=4)
+        self._current_col = 2
+        self._workbook.active.cell(1,1, "Material ID:")
+        self._workbook.active.cell(2,1, "Material Name:")
 
-    for col in data_columns:
-        ws["{}{}".format(data_columns[col], parameter_row_start_index-1)] = col
-    ws["A{}".format(parameter_row_start_index-1)] = 'Parameter'
+    def store_material_parameters(self, materials):
+        for material_id in materials.keys():
+            # Work sheet
+            ws = self._workbook.active
+            ws.cell(1, self._current_col, material_id)
 
-    # Fill in parameters
-    for pd_key in material_params:
-        pd = material_params[pd_key]
-        row = parameters_index_rows[pd['Name']]
-        for field in pd:
-            cell_name = "{}{}".format(data_columns[field], row)
-            ws[cell_name] = pd[field]
+            for material in materials[material_id].keys():
 
-    wb.save('materials.xlsx')
+                # Header: material name
+                ws.cell(2, self._current_col, material)
+                ws.merge_cells(start_row=2, end_row=2, start_column=self._current_col, end_column=self._current_col+3)
+
+                parameters = materials[material_id][material]
+                self._param_row.add_parameters(parameters.keys())
+                for param in parameters:
+                    col = self._current_col
+                    for field in ['Default', 'Unit', 'Type', 'Access']:
+                        ws.cell(self._param_row.parameter_index[param], col, parameters[param][field])
+                        col += 1
+                self._current_col += 4
+
+    def update_parameter_column(self):
+        wb = self._workbook.active
+        for p in self._param_row.parameter_index:
+            row = self._param_row.parameter_index[p]
+            wb.cell(row, 1, p)
+
+    def save(self):
+        self.update_parameter_column()
+        self._workbook.save(self._fname)
 
 
 def main():
@@ -131,7 +144,13 @@ def main():
     for fname in fnames:
         materials.append(parse_mtl(fname))
 
-    pprint(materials)
+    spreadsheet_fname = str(sys.argv[2])
+    print(F"Creating spreadsheet: {spreadsheet_fname}")
+    s = StoreSpreadsheet(spreadsheet_fname)
+    for material in materials:
+        print(F"storing material: \"{material}\" in spreadsheet")
+        s.store_material_parameters(material)
+    s.save()
 
 
 if __name__=="__main__":
