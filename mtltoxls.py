@@ -2,7 +2,7 @@ import re
 import glob
 import sys
 import os
-from  openpyxl import Workbook
+from openpyxl import Workbook
 from pprint import pprint
 
 re_key = re.compile(r'(\S*)\s*=\s*\{\s*Name\s*=\s*(\S*)\s*\n')
@@ -51,7 +51,13 @@ def parse_mtl(fname):
         elif pdtype == 'Integer':
             value = int(value)
         elif pdtype == 'String':
-            value = str(value.strip("\'"))
+            # TODO: hack alert - if only I knew better regexp I could avoid this...
+            if pd['Unit'] is not None:
+                value = "{} {}".format(str(value), str(pd['Unit'])).strip()
+                pd['Unit'] = ''
+            else:
+                value = str(value).strip()
+            value = value.strip('\'').strip('\"')
         pd['Default'] = value
 
     # make a dictionary of parameters where the parameter Name is the key
@@ -82,10 +88,12 @@ class ParameterRowIndex:
 
     def add_parameters(self, parameters: list):
         """Add new parameters to the index data. Only new parameters from the 'parameters' list are added with
-        an incremental index"""
-        for param in parameters:
+        an incremental index
+        :parameters is a list of dictionaries with fields for Type and Access"""
+        param_type_access = [(p, parameters[p]['Type'], parameters[p]['Access']) for p in parameters.keys()]
+        for param, param_type, param_access in param_type_access:
             if param not in self._parameter_index:
-                self._parameter_index.update({param: self._current_offset})
+                self._parameter_index.update({param: {'Offset': self._current_offset, 'Type': param_type, 'Access': param_access}})
                 self._current_offset += 1
 
     @property
@@ -97,8 +105,8 @@ class StoreSpreadsheet:
     def __init__(self, fname):
         self._fname = fname
         self._workbook = Workbook()
-        self._param_row = ParameterRowIndex(offset=4)
-        self._current_col = 2
+        self._param_row = ParameterRowIndex(offset=3)
+        self._current_col = 4
         self._workbook.active.cell(1,1, "Material ID:")
         self._workbook.active.cell(2,1, "Material Name:")
 
@@ -107,27 +115,28 @@ class StoreSpreadsheet:
             # Work sheet
             ws = self._workbook.active
             ws.cell(1, self._current_col, material_id)
+            ws.merge_cells(start_row=1, end_row=1, start_column=self._current_col, end_column=self._current_col + 1)
 
             for material in materials[material_id].keys():
 
                 # Header: material name
                 ws.cell(2, self._current_col, material)
-                ws.merge_cells(start_row=2, end_row=2, start_column=self._current_col, end_column=self._current_col+3)
+                ws.merge_cells(start_row=2, end_row=2, start_column=self._current_col, end_column=self._current_col+1)
 
                 parameters = materials[material_id][material]
-                self._param_row.add_parameters(parameters.keys())
+                self._param_row.add_parameters(parameters)
                 for param in parameters:
-                    col = self._current_col
-                    for field in ['Default', 'Unit', 'Type', 'Access']:
-                        ws.cell(self._param_row.parameter_index[param], col, parameters[param][field])
-                        col += 1
-                self._current_col += 4
+                    ws.cell(self._param_row.parameter_index[param]['Offset'], self._current_col, parameters[param]['Default'])
+                    ws.cell(self._param_row.parameter_index[param]['Offset'], self._current_col + 1, parameters[param]['Unit'])
+                self._current_col += 2
 
     def update_parameter_column(self):
         wb = self._workbook.active
         for p in self._param_row.parameter_index:
-            row = self._param_row.parameter_index[p]
+            row = self._param_row.parameter_index[p]['Offset']
             wb.cell(row, 1, p)
+            wb.cell(row, 2, self._param_row.parameter_index[p]['Type'])
+            wb.cell(row, 3, self._param_row.parameter_index[p]['Access'])
 
     def save(self):
         self.update_parameter_column()
@@ -140,6 +149,7 @@ def main():
     print(F"Searching dir for mtl files: \"{full_path}\"")
     fnames = glob.glob(F"{full_path}/*.mtl")
     pprint(fnames)
+
     materials = []
     for fname in fnames:
         materials.append(parse_mtl(fname))
